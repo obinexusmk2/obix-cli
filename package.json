@@ -1,0 +1,38 @@
+{
+  "name": "@obinexusltd/obix-cli",
+  "version": "0.1.0",
+  "description": "OBIX CLI - Build tooling, schema validation, semantic version X management",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "bin": {
+    "obix": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "postbuild": "node -e \"try{require('fs').chmodSync('dist/bin.js',0o755)}catch(_){}\"",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "license": "MIT",
+  "author": "OBINexus <okpalan@protonmail.com>",
+  "dependencies": {
+    "@obinexusltd/obix-core": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "vitest": "^4.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
