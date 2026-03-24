@@ -118,3 +118,4 @@ The `CLIState` is intentionally flat (all primitive fields) to satisfy `obix-cor
 ## License
 
 MIT — OBINexus &lt;okpalan@protonmail.com&gt;
+# obix-sdk-cli
