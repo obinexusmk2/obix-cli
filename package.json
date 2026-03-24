@@ -1,6 +1,6 @@
 {
-  "name": "@obinexusltd/obix-cli",
-  "version": "0.1.0",
+  "name": "@obinexusltd/obix-sdk-cli",
+  "version": "0.1.1",
   "description": "OBIX CLI - Build tooling, schema validation, semantic version X management",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,7 +26,7 @@
   "license": "MIT",
   "author": "OBINexus <okpalan@protonmail.com>",
   "dependencies": {
-    "@obinexusltd/obix-core": "^0.1.0"
+    "@obinexusltd/obix-sdk-core": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
