@@ -1,40 +1,56 @@
 /**
  * OBIX CLI - Build tooling, schema validation, semantic version X management
- * Command-line interface for OBIX SDK build and validation.
- *
- * The CLI is itself an OBIX component: its runtime state is managed by
- * ObixRuntime. Each command drives a lifecycle transition on that component.
  */
 
-import { ObixRuntime, LifecycleHook } from "@obinexusltd/obix-core";
+import { ObixRuntime, LifecycleHook } from "@obinexusltd/obix-sdk-core";
+import type { LifecycleHandler } from "@obinexusltd/obix-sdk-core";
 import type { CLIState, CLICommand, CLIStatus } from "./types.js";
+import {
+  compileSource,
+  compileFile,
+  compileProject,
+  detectLoader,
+  type CompileOptions,
+  type CompileResult,
+  type FileCompileResult,
+  type CompileLoader,
+} from "./compiler.js";
+import {
+  ComponentRegistry,
+  buildRegistry,
+  scanComponents,
+  type RegistryEntry,
+  type ComponentParadigm,
+} from "./registry.js";
 
-// Re-export types for consumers of this package
 export type { CLIState, CLICommand, CLIStatus } from "./types.js";
 
-/**
- * Build target platforms
- */
+export {
+  compileSource,
+  compileFile,
+  compileProject,
+  detectLoader,
+  ComponentRegistry,
+  buildRegistry,
+  scanComponents,
+};
+export type {
+  CompileOptions,
+  CompileResult,
+  FileCompileResult,
+  CompileLoader,
+  RegistryEntry,
+  ComponentParadigm,
+};
+
 export type BuildTarget = "esm" | "cjs" | "umd" | "iife";
 
-/**
- * Schema validation result
- */
 export interface SchemaValidation {
   valid: boolean;
-  errors: Array<{
-    path: string;
-    message: string;
-  }>;
-  warnings?: Array<{
-    path: string;
-    message: string;
-  }>;
+  errors: Array<{ path: string; message: string }>;
+  warnings?: Array<{ path: string; message: string }>;
 }
 
-/**
- * Semantic version X (flexible versioning)
- */
 export interface SemanticVersionX {
   major: number;
   minor: number;
@@ -44,9 +60,6 @@ export interface SemanticVersionX {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * Hot swap configuration for development
- */
 export interface HotSwapConfig {
   enabled: boolean;
   watchPaths?: string[];
@@ -54,9 +67,6 @@ export interface HotSwapConfig {
   delay?: number;
 }
 
-/**
- * Build configuration
- */
 export interface BuildConfig {
   targets: BuildTarget[];
   outputDir?: string;
@@ -65,47 +75,47 @@ export interface BuildConfig {
   hotSwap?: HotSwapConfig;
 }
 
-/**
- * CLI configuration
- */
 export interface CLIConfig {
   packageRoot: string;
   buildConfig?: BuildConfig;
   strictMode?: boolean;
 }
 
-/**
- * Build result
- */
 export interface BuildResult {
   success: boolean;
-  outputs: Array<{
-    target: BuildTarget;
-    path: string;
-    size: number;
-  }>;
+  outputs: Array<{ target: BuildTarget; path: string; size: number }>;
   duration: number;
   errors?: string[];
 }
 
-/**
- * OBIX CLI interface
- */
+export interface CompileConfig {
+  entry: string;
+  outDir: string;
+  module?: "esm" | "cjs";
+  jsx?: "react" | "preserve" | "react-jsx";
+  sourceMap?: boolean;
+  buildRegistry?: boolean;
+}
+
+export interface CompileCLIResult {
+  success: boolean;
+  filesProcessed: number;
+  filesFailed: number;
+  duration: number;
+  outputs: FileCompileResult[];
+  registry?: RegistryEntry[];
+  errors?: string[];
+}
+
 export interface ObixCLI {
   build(config?: BuildConfig): Promise<BuildResult>;
+  compile(config: CompileConfig): Promise<CompileCLIResult>;
   validate(schemaPath: string): Promise<SchemaValidation>;
   version(): SemanticVersionX;
   hotSwap(config: HotSwapConfig): void;
   migrate(fromVersion: string, toVersion: string): Promise<void>;
 }
 
-/**
- * Create a CLI instance backed by an ObixRuntime component.
- *
- * The CLI's state (current command, status, output) is modeled as an OBIX
- * ComponentDefinition. Each method drives state transitions through the
- * runtime's action/update cycle, surfacing component lifecycle in the terminal.
- */
 export function createCLI(config: CLIConfig): ObixCLI {
   const runtime = new ObixRuntime(
     { maxRevisions: 50, stabilityThreshold: 3, haltOnPolicyViolation: false }
@@ -131,6 +141,10 @@ export function createCLI(config: CLIConfig): ObixCLI {
       buildTargets: (config.buildConfig?.targets ?? ["esm"]).join(","),
       buildOutputDir: config.buildConfig?.outputDir ?? "dist",
       buildDuration: 0,
+      compileEntry: "",
+      compileOutDir: "",
+      compileFilesProcessed: 0,
+      compileErrors: 0,
     },
     actions: {
       setCommand: (command: CLICommand) => ({ command }),
@@ -151,6 +165,19 @@ export function createCLI(config: CLIConfig): ObixCLI {
         migrateFrom: from,
         migrateTo: to,
       }),
+      setCompileResult: (
+        entry: string,
+        outDir: string,
+        filesProcessed: number,
+        errorCount: number
+      ) => ({
+        status: (errorCount === 0 ? "success" : "error") as CLIStatus,
+        compileEntry: entry,
+        compileOutDir: outDir,
+        compileFilesProcessed: filesProcessed,
+        compileErrors: errorCount,
+        output: `Compiled ${filesProcessed} file(s), ${errorCount} error(s)`,
+      }),
     },
     render: (state: CLIState) =>
       `[OBIX CLI] command=${state.command} status=${state.status}` +
@@ -161,19 +188,12 @@ export function createCLI(config: CLIConfig): ObixCLI {
   const instance = runtime.create<CLIState>("ObixCLI");
   const instanceId = instance.id;
 
-  // Subscribe to lifecycle events for diagnostics
-  runtime.onLifecycle((event) => {
+  runtime.onLifecycle((event: Parameters<LifecycleHandler>[0]) => {
     if (event.hook === LifecycleHook.HALTED) {
-      // State stabilized — expected for CLI after repeated identical commands.
-      // The applyAction helper resumes automatically before the next command.
+      // State stabilized
     }
   });
 
-  /**
-   * Apply an action, resuming the component first if state-halted.
-   * StateHaltEngine halts after stabilityThreshold identical snapshots —
-   * normal CLI behavior when the same command runs multiple times.
-   */
   function applyAction(actionName: string, ...args: unknown[]): void {
     const current = runtime.getInstance<CLIState>(instanceId);
     if (current?.halted) {
@@ -221,6 +241,88 @@ export function createCLI(config: CLIConfig): ObixCLI {
           success: false,
           outputs: [],
           duration: Date.now() - startTime,
+          errors: [msg],
+        };
+      }
+    },
+
+    async compile(compileConfig: CompileConfig): Promise<CompileCLIResult> {
+      applyAction("setCommand", "compile" satisfies CLICommand);
+      applyAction("setStatus", "running" satisfies CLIStatus);
+
+      const startTime = Date.now();
+
+      try {
+        const { existsSync } = await import("node:fs");
+        const { resolve } = await import("node:path");
+        const entryAbs = resolve(config.packageRoot, compileConfig.entry);
+        const outAbs = resolve(config.packageRoot, compileConfig.outDir);
+
+        if (!existsSync(entryAbs)) {
+          const msg = `compile entry not found: ${entryAbs}`;
+          applyAction("setError", msg);
+          return {
+            success: false,
+            filesProcessed: 0,
+            filesFailed: 0,
+            duration: Date.now() - startTime,
+            outputs: [],
+            errors: [msg],
+          };
+        }
+
+        const outputs = await compileProject(entryAbs, outAbs, {
+          module: compileConfig.module ?? "esm",
+          jsx: compileConfig.jsx ?? "react",
+          sourceMap: compileConfig.sourceMap ?? false,
+        });
+
+        const failed = outputs.filter((o) =>
+          o.diagnostics.some((d) => d.category === "error")
+        );
+
+        let registry: RegistryEntry[] | undefined;
+        if (compileConfig.buildRegistry) {
+          const { readFile } = await import("node:fs/promises");
+          const files = await Promise.all(
+            outputs.map(async (o) => ({
+              path: o.inputPath,
+              source: await readFile(o.inputPath, "utf-8"),
+            }))
+          );
+          registry = buildRegistry(files).all();
+        }
+
+        applyAction(
+          "setCompileResult",
+          entryAbs,
+          outAbs,
+          outputs.length,
+          failed.length
+        );
+
+        return {
+          success: failed.length === 0,
+          filesProcessed: outputs.length,
+          filesFailed: failed.length,
+          duration: Date.now() - startTime,
+          outputs,
+          registry,
+          errors: failed.flatMap((f) =>
+            f.diagnostics
+              .filter((d) => d.category === "error")
+              .map((d) => `${f.inputPath}: ${d.message}`)
+          ),
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        applyAction("setError", msg);
+        return {
+          success: false,
+          filesProcessed: 0,
+          filesFailed: 0,
+          duration: Date.now() - startTime,
+          outputs: [],
           errors: [msg],
         };
       }

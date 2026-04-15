@@ -6,6 +6,7 @@
 
 export type CLICommand =
   | "build"
+  | "compile"
   | "validate"
   | "version"
   | "hot-swap"
@@ -39,7 +40,12 @@ export interface CLIState {
   migrateFrom: string;
   migrateTo: string;
   // Build
-  buildTargets: string;   // comma-separated list (avoids array depth)
+  buildTargets: string;
   buildOutputDir: string;
   buildDuration: number;
+  // Compile (JSX/TSX)
+  compileEntry: string;
+  compileOutDir: string;
+  compileFilesProcessed: number;
+  compileErrors: number;
 }

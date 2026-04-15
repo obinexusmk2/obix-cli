@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#\!/usr/bin/env node
 /**
  * OBIX CLI Entry Point
  */
@@ -26,12 +26,12 @@ function parseArgs(argv: string[]): {
     const arg = args[i];
     if (arg.startsWith("--")) {
       const eqIndex = arg.indexOf("=");
-      if (eqIndex !== -1) {
+      if (eqIndex \!== -1) {
         flags[arg.slice(2, eqIndex)] = arg.slice(eqIndex + 1);
       } else {
         const key = arg.slice(2);
         const next = args[i + 1];
-        if (next !== undefined && !next.startsWith("--")) {
+        if (next \!== undefined && \!next.startsWith("--")) {
           flags[key] = next;
           i++;
         } else {
@@ -126,13 +126,13 @@ async function main(): Promise<void> {
   switch (command) {
     case "build": {
       const buildConfig: BuildConfig = {
-        targets: cliConfig.buildConfig!.targets!,
-        outputDir: cliConfig.buildConfig!.outputDir,
-        sourceMap: cliConfig.buildConfig!.sourceMap,
-        minify: cliConfig.buildConfig!.minify,
+        targets: cliConfig.buildConfig\!.targets\!,
+        outputDir: cliConfig.buildConfig\!.outputDir,
+        sourceMap: cliConfig.buildConfig\!.sourceMap,
+        minify: cliConfig.buildConfig\!.minify,
       };
       const result = await cli.build(buildConfig);
-      if (!result.success) {
+      if (\!result.success) {
         process.stderr.write(
           `Build failed:\n${(result.errors ?? []).join("\n")}\n`
         );
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
         typeof flags["entry"] === "string"
           ? flags["entry"]
           : (positional[0] ?? "");
-      if (!entry) {
+      if (\!entry) {
         process.stderr.write(
           "compile requires --entry <path>\nUsage: obix compile --entry src --out dist\n"
         );
@@ -170,7 +170,7 @@ async function main(): Promise<void> {
         buildRegistry: flags["registry"] === true,
       };
       const result = await cli.compile(compileConfig);
-      if (!result.success) {
+      if (\!result.success) {
         process.stderr.write(
           `Compile failed (${result.filesFailed}/${result.filesProcessed}):\n` +
             (result.errors ?? []).join("\n") +
@@ -194,14 +194,14 @@ async function main(): Promise<void> {
 
     case "validate": {
       const schemaPath = positional[0];
-      if (!schemaPath) {
+      if (\!schemaPath) {
         process.stderr.write(
           "validate requires a schema path argument\nUsage: obix validate <schema-path>\n"
         );
         process.exit(1);
       }
       const result = await cli.validate(schemaPath);
-      if (!result.valid) {
+      if (\!result.valid) {
         process.stderr.write("Validation failed:\n");
         for (const err of result.errors) {
           process.stderr.write(`  ${err.path}: ${err.message}\n`);
@@ -245,7 +245,7 @@ async function main(): Promise<void> {
 
       for (const watchPath of watchPaths) {
         watch(watchPath, { recursive: true }, (_eventType, filename) => {
-          if (debounceTimer !== null) clearTimeout(debounceTimer);
+          if (debounceTimer \!== null) clearTimeout(debounceTimer);
           debounceTimer = setTimeout(async () => {
             process.stdout.write(
               `[hot-swap] Change detected: ${filename ?? "unknown"}\n`
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
     case "migrate": {
       const fromVersion = positional[0];
       const toVersion = positional[1];
-      if (!fromVersion || !toVersion) {
+      if (\!fromVersion || \!toVersion) {
         process.stderr.write(
           "migrate requires two version arguments\nUsage: obix migrate <from-version> <to-version>\n"
         );

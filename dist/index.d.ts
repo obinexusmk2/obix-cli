@@ -1,18 +1,12 @@
 /**
  * OBIX CLI - Build tooling, schema validation, semantic version X management
- * Command-line interface for OBIX SDK build and validation.
- *
- * The CLI is itself an OBIX component: its runtime state is managed by
- * ObixRuntime. Each command drives a lifecycle transition on that component.
  */
+import { compileSource, compileFile, compileProject, detectLoader, type CompileOptions, type CompileResult, type FileCompileResult, type CompileLoader } from "./compiler.js";
+import { ComponentRegistry, buildRegistry, scanComponents, type RegistryEntry, type ComponentParadigm } from "./registry.js";
 export type { CLIState, CLICommand, CLIStatus } from "./types.js";
-/**
- * Build target platforms
- */
+export { compileSource, compileFile, compileProject, detectLoader, ComponentRegistry, buildRegistry, scanComponents, };
+export type { CompileOptions, CompileResult, FileCompileResult, CompileLoader, RegistryEntry, ComponentParadigm, };
 export type BuildTarget = "esm" | "cjs" | "umd" | "iife";
-/**
- * Schema validation result
- */
 export interface SchemaValidation {
     valid: boolean;
     errors: Array<{
@@ -24,9 +18,6 @@ export interface SchemaValidation {
         message: string;
     }>;
 }
-/**
- * Semantic version X (flexible versioning)
- */
 export interface SemanticVersionX {
     major: number;
     minor: number;
@@ -35,18 +26,12 @@ export interface SemanticVersionX {
     prerelease?: boolean;
     metadata?: Record<string, unknown>;
 }
-/**
- * Hot swap configuration for development
- */
 export interface HotSwapConfig {
     enabled: boolean;
     watchPaths?: string[];
     excludePatterns?: string[];
     delay?: number;
 }
-/**
- * Build configuration
- */
 export interface BuildConfig {
     targets: BuildTarget[];
     outputDir?: string;
@@ -54,17 +39,11 @@ export interface BuildConfig {
     minify?: boolean;
     hotSwap?: HotSwapConfig;
 }
-/**
- * CLI configuration
- */
 export interface CLIConfig {
     packageRoot: string;
     buildConfig?: BuildConfig;
     strictMode?: boolean;
 }
-/**
- * Build result
- */
 export interface BuildResult {
     success: boolean;
     outputs: Array<{
@@ -75,22 +54,30 @@ export interface BuildResult {
     duration: number;
     errors?: string[];
 }
-/**
- * OBIX CLI interface
- */
+export interface CompileConfig {
+    entry: string;
+    outDir: string;
+    module?: "esm" | "cjs";
+    jsx?: "react" | "preserve" | "react-jsx";
+    sourceMap?: boolean;
+    buildRegistry?: boolean;
+}
+export interface CompileCLIResult {
+    success: boolean;
+    filesProcessed: number;
+    filesFailed: number;
+    duration: number;
+    outputs: FileCompileResult[];
+    registry?: RegistryEntry[];
+    errors?: string[];
+}
 export interface ObixCLI {
     build(config?: BuildConfig): Promise<BuildResult>;
+    compile(config: CompileConfig): Promise<CompileCLIResult>;
     validate(schemaPath: string): Promise<SchemaValidation>;
     version(): SemanticVersionX;
     hotSwap(config: HotSwapConfig): void;
     migrate(fromVersion: string, toVersion: string): Promise<void>;
 }
-/**
- * Create a CLI instance backed by an ObixRuntime component.
- *
- * The CLI's state (current command, status, output) is modeled as an OBIX
- * ComponentDefinition. Each method drives state transitions through the
- * runtime's action/update cycle, surfacing component lifecycle in the terminal.
- */
 export declare function createCLI(config: CLIConfig): ObixCLI;
 //# sourceMappingURL=index.d.ts.map

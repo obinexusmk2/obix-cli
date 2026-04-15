@@ -1,21 +1,8 @@
 #!/usr/bin/env node
 /**
  * OBIX CLI Entry Point
- * The terminal heart/soul of the OBIX SDK.
- *
- * Usage:
- *   obix build [--target esm,cjs] [--out dist] [--map] [--minify]
- *   obix validate <schema-path>
- *   obix version
- *   obix hot-swap [--watch src] [--delay 300]
- *   obix migrate <from-version> <to-version>
- *   obix help
  */
 import { createCLI } from "./index.js";
-// ---------------------------------------------------------------------------
-// Minimal argv parser — no external dependencies
-// Handles: --flag value, --flag=value, boolean --flag, positional args
-// ---------------------------------------------------------------------------
 function parseArgs(argv) {
     const args = argv.slice(2);
     const command = args[0] ?? "help";
@@ -46,11 +33,8 @@ function parseArgs(argv) {
     }
     return { command, positional, flags };
 }
-// ---------------------------------------------------------------------------
-// Help text
-// ---------------------------------------------------------------------------
 const HELP_TEXT = `
-OBIX CLI — Heart/Soul SDK build tooling and schema validation
+OBIX CLI - Heart/Soul SDK build tooling and schema validation
 Version: 0.1.0
 
 USAGE
@@ -58,6 +42,7 @@ USAGE
 
 COMMANDS
   build       Compile the OBIX project (runs tsc)
+  compile     Compile JSX/TSX React sources to JS
   validate    Validate a JSON schema file
   version     Show version information
   hot-swap    Enable file-watching hot swap for development
@@ -66,10 +51,17 @@ COMMANDS
 
 BUILD OPTIONS
   --target    Comma-separated build targets (default: esm)
-              Supported: esm, cjs, umd, iife
   --out       Output directory (default: dist)
   --map       Enable source maps
   --minify    Minify output
+
+COMPILE OPTIONS
+  --entry     Source file or directory (.jsx/.tsx/.ts/.js)  [required]
+  --out       Output directory (default: dist)
+  --module    esm | cjs   (default: esm)
+  --jsx       react | preserve | react-jsx (default: react)
+  --map       Emit .map sourcemap files
+  --registry  Scan sources and print component registry
 
 VALIDATE OPTIONS
   <path>      Path to JSON schema file (required)
@@ -88,14 +80,13 @@ GLOBAL OPTIONS
 
 EXAMPLES
   obix build --target esm,cjs --out dist
+  obix compile --entry src --out dist --jsx react --map
+  obix compile --entry src/App.jsx --out dist --registry
   obix validate ./schema/component.json
   obix version
   obix hot-swap --watch src,lib --delay 500
   obix migrate 0.1.0 0.2.0
 `.trimStart();
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
 async function main() {
     const { command, positional, flags } = parseArgs(process.argv);
     const packageRoot = typeof flags["root"] === "string" ? flags["root"] : process.cwd();
@@ -128,6 +119,42 @@ async function main() {
             process.stdout.write(`Build succeeded in ${result.duration}ms\n`);
             for (const output of result.outputs) {
                 process.stdout.write(`  [${output.target}] -> ${output.path}\n`);
+            }
+            break;
+        }
+        case "compile": {
+            const entry = typeof flags["entry"] === "string"
+                ? flags["entry"]
+                : (positional[0] ?? "");
+            if (!entry) {
+                process.stderr.write("compile requires --entry <path>\nUsage: obix compile --entry src --out dist\n");
+                process.exit(1);
+            }
+            const compileConfig = {
+                entry,
+                outDir: typeof flags["out"] === "string" ? flags["out"] : "dist",
+                module: flags["module"] === "cjs" ? "cjs" : "esm",
+                jsx: flags["jsx"] === "preserve"
+                    ? "preserve"
+                    : flags["jsx"] === "react-jsx"
+                        ? "react-jsx"
+                        : "react",
+                sourceMap: flags["map"] === true,
+                buildRegistry: flags["registry"] === true,
+            };
+            const result = await cli.compile(compileConfig);
+            if (!result.success) {
+                process.stderr.write(`Compile failed (${result.filesFailed}/${result.filesProcessed}):\n` +
+                    (result.errors ?? []).join("\n") +
+                    "\n");
+                process.exit(1);
+            }
+            process.stdout.write(`Compiled ${result.filesProcessed} file(s) in ${result.duration}ms -> ${compileConfig.outDir}\n`);
+            if (result.registry) {
+                process.stdout.write(`Component registry (${result.registry.length}):\n`);
+                for (const c of result.registry) {
+                    process.stdout.write(`  [${c.paradigm}] ${c.name}${c.isDefault ? " (default)" : ""}  <- ${c.sourcePath}\n`);
+                }
             }
             break;
         }

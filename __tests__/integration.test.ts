@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { createCLI, type CLIConfig } from "../src/index.js";
-import { ObixRuntime } from "@obinexusltd/obix-core";
+import { ObixRuntime } from "@obinexusltd/obix-sdk-core";
 
 describe("obix-cli integration", () => {
   let config: CLIConfig;
@@ -73,9 +73,11 @@ describe("obix-cli integration", () => {
     });
 
     it("returns invalid for malformed JSON content", async () => {
-      // Write a temp file with bad JSON, then validate it
-      const { writeFileSync, unlinkSync } = await import("node:fs");
-      const tmpPath = `${process.cwd()}/__obix_bad_json_test__.json`;
+      const { writeFileSync, unlinkSync, mkdtempSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { tmpdir } = await import("node:os");
+      const dir = mkdtempSync(join(tmpdir(), "obix-test-"));
+      const tmpPath = join(dir, "__obix_bad_json_test__.json");
       writeFileSync(tmpPath, "{ bad json ::::", "utf-8");
       try {
         const cli = createCLI(config);
@@ -88,8 +90,11 @@ describe("obix-cli integration", () => {
     });
 
     it("returns valid for well-formed JSON", async () => {
-      const { writeFileSync, unlinkSync } = await import("node:fs");
-      const tmpPath = `${process.cwd()}/__obix_valid_json_test__.json`;
+      const { writeFileSync, unlinkSync, mkdtempSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { tmpdir } = await import("node:os");
+      const dir = mkdtempSync(join(tmpdir(), "obix-test-"));
+      const tmpPath = join(dir, "__obix_valid_json_test__.json");
       writeFileSync(tmpPath, JSON.stringify({ name: "test", version: "0.1.0" }), "utf-8");
       try {
         const cli = createCLI(config);

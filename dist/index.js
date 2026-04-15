@@ -1,18 +1,10 @@
 /**
  * OBIX CLI - Build tooling, schema validation, semantic version X management
- * Command-line interface for OBIX SDK build and validation.
- *
- * The CLI is itself an OBIX component: its runtime state is managed by
- * ObixRuntime. Each command drives a lifecycle transition on that component.
  */
-import { ObixRuntime, LifecycleHook } from "@obinexusltd/obix-core";
-/**
- * Create a CLI instance backed by an ObixRuntime component.
- *
- * The CLI's state (current command, status, output) is modeled as an OBIX
- * ComponentDefinition. Each method drives state transitions through the
- * runtime's action/update cycle, surfacing component lifecycle in the terminal.
- */
+import { ObixRuntime, LifecycleHook } from "@obinexusltd/obix-sdk-core";
+import { compileSource, compileFile, compileProject, detectLoader, } from "./compiler.js";
+import { ComponentRegistry, buildRegistry, scanComponents, } from "./registry.js";
+export { compileSource, compileFile, compileProject, detectLoader, ComponentRegistry, buildRegistry, scanComponents, };
 export function createCLI(config) {
     const runtime = new ObixRuntime({ maxRevisions: 50, stabilityThreshold: 3, haltOnPolicyViolation: false });
     runtime.register({
@@ -35,6 +27,10 @@ export function createCLI(config) {
             buildTargets: (config.buildConfig?.targets ?? ["esm"]).join(","),
             buildOutputDir: config.buildConfig?.outputDir ?? "dist",
             buildDuration: 0,
+            compileEntry: "",
+            compileOutDir: "",
+            compileFilesProcessed: 0,
+            compileErrors: 0,
         },
         actions: {
             setCommand: (command) => ({ command }),
@@ -55,6 +51,14 @@ export function createCLI(config) {
                 migrateFrom: from,
                 migrateTo: to,
             }),
+            setCompileResult: (entry, outDir, filesProcessed, errorCount) => ({
+                status: (errorCount === 0 ? "success" : "error"),
+                compileEntry: entry,
+                compileOutDir: outDir,
+                compileFilesProcessed: filesProcessed,
+                compileErrors: errorCount,
+                output: `Compiled ${filesProcessed} file(s), ${errorCount} error(s)`,
+            }),
         },
         render: (state) => `[OBIX CLI] command=${state.command} status=${state.status}` +
             (state.output ? `\n  ${state.output}` : "") +
@@ -62,18 +66,11 @@ export function createCLI(config) {
     });
     const instance = runtime.create("ObixCLI");
     const instanceId = instance.id;
-    // Subscribe to lifecycle events for diagnostics
     runtime.onLifecycle((event) => {
         if (event.hook === LifecycleHook.HALTED) {
-            // State stabilized — expected for CLI after repeated identical commands.
-            // The applyAction helper resumes automatically before the next command.
+            // State stabilized
         }
     });
-    /**
-     * Apply an action, resuming the component first if state-halted.
-     * StateHaltEngine halts after stabilityThreshold identical snapshots —
-     * normal CLI behavior when the same command runs multiple times.
-     */
     function applyAction(actionName, ...args) {
         const current = runtime.getInstance(instanceId);
         if (current?.halted) {
@@ -115,6 +112,68 @@ export function createCLI(config) {
                     success: false,
                     outputs: [],
                     duration: Date.now() - startTime,
+                    errors: [msg],
+                };
+            }
+        },
+        async compile(compileConfig) {
+            applyAction("setCommand", "compile");
+            applyAction("setStatus", "running");
+            const startTime = Date.now();
+            try {
+                const { existsSync } = await import("node:fs");
+                const { resolve } = await import("node:path");
+                const entryAbs = resolve(config.packageRoot, compileConfig.entry);
+                const outAbs = resolve(config.packageRoot, compileConfig.outDir);
+                if (!existsSync(entryAbs)) {
+                    const msg = `compile entry not found: ${entryAbs}`;
+                    applyAction("setError", msg);
+                    return {
+                        success: false,
+                        filesProcessed: 0,
+                        filesFailed: 0,
+                        duration: Date.now() - startTime,
+                        outputs: [],
+                        errors: [msg],
+                    };
+                }
+                const outputs = await compileProject(entryAbs, outAbs, {
+                    module: compileConfig.module ?? "esm",
+                    jsx: compileConfig.jsx ?? "react",
+                    sourceMap: compileConfig.sourceMap ?? false,
+                });
+                const failed = outputs.filter((o) => o.diagnostics.some((d) => d.category === "error"));
+                let registry;
+                if (compileConfig.buildRegistry) {
+                    const { readFile } = await import("node:fs/promises");
+                    const files = await Promise.all(outputs.map(async (o) => ({
+                        path: o.inputPath,
+                        source: await readFile(o.inputPath, "utf-8"),
+                    })));
+                    registry = buildRegistry(files).all();
+                }
+                applyAction("setCompileResult", entryAbs, outAbs, outputs.length, failed.length);
+                return {
+                    success: failed.length === 0,
+                    filesProcessed: outputs.length,
+                    filesFailed: failed.length,
+                    duration: Date.now() - startTime,
+                    outputs,
+                    registry,
+                    errors: failed.flatMap((f) => f.diagnostics
+                        .filter((d) => d.category === "error")
+                        .map((d) => `${f.inputPath}: ${d.message}`)),
+                };
+            }
+            catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                applyAction("setError", msg);
+                return {
+                    success: false,
+                    filesProcessed: 0,
+                    filesFailed: 0,
+                    duration: Date.now() - startTime,
+                    outputs: [],
                     errors: [msg],
                 };
             }
