@@ -3,7 +3,6 @@
  */
 
 import { ObixRuntime, LifecycleHook } from "@obinexusltd/obix-sdk-core";
-import type { LifecycleHandler } from "@obinexusltd/obix-sdk-core";
 import type { CLIState, CLICommand, CLIStatus } from "./types.js";
 import {
   compileSource,
@@ -188,10 +187,8 @@ export function createCLI(config: CLIConfig): ObixCLI {
   const instance = runtime.create<CLIState>("ObixCLI");
   const instanceId = instance.id;
 
-  runtime.onLifecycle((event: Parameters<LifecycleHandler>[0]) => {
-    if (event.hook === LifecycleHook.HALTED) {
-      // State stabilized
-    }
+  runtime.onLifecycle((_event: { hook: LifecycleHook; instanceId: string; timestamp: number }) => {
+    // State stabilized — HALTED events are expected; applyAction resumes before each command.
   });
 
   function applyAction(actionName: string, ...args: unknown[]): void {

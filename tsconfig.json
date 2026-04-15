@@ -3,7 +3,11 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@obinexusltd/obix-sdk-core": ["../obix-sdk-core/dist/index"]
+    }
   },
   "include": ["src"],
   "exclude": ["dist", "node_modules", "__tests__", "spec"]
